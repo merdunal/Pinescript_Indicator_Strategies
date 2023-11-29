@@ -1,0 +1,49 @@
+//@version=5
+strategy(title = "Progressive & Profit with Stop Loss", overlay = true, shorttitle = "Progressive & Profit with Stop Loss", pyramiding=1, calc_on_order_fills=false, calc_on_every_tick=true, default_qty_type=strategy.percent_of_equity, default_qty_value=100,initial_capital=1000,scale=scale.none)
+startDate = input.time(defval=timestamp("2023-06-30T16:40:00"), title="Start Date")
+endDate = input.time(defval=timestamp("2023-12-31T23:59:59"), title="End Date")
+
+
+// Kar hedefini belirle (kâr yüzdesi olarak, 100 üzerinden)
+profitTargetPercentage = input.float(defval=10, title="Profit Target (%)")
+
+// Stop loss yüzdesi
+stopLossPercentage = input.float(defval=2, title="Stop Loss Percentage (%)")
+
+length = input(14)
+overSold = input(30)
+
+// RSI calculation
+price = close
+vrsi = ta.rsi(price, length)
+
+// Her mum çubuğu kapandığında işleme gir
+longCondition = bar_index[1] != bar_index and vrsi < overSold // RSI 30'un altında olmalı
+
+// Kar hedefini kontrol et ve pozisyonları kapat
+var float profitTargetPrice = na
+
+if (time >= startDate and time <= endDate)
+    if (strategy.position_size > 0)
+        profitTargetPrice := strategy.position_avg_price * (1 + profitTargetPercentage / 100)
+
+// Stop loss fiyatını hesapla
+stopLossPrice = strategy.position_avg_price * (1 - stopLossPercentage / 100)
+
+// Piramit için pozisyon büyüklüğü hesaplaması
+var float positionSize = na
+
+if (strategy.opentrades == 0)
+    positionSize := 1
+
+// Sadece long pozisyonlarda stop loss'u kontrol et ve pozisyonları kapat
+if (strategy.position_size > 0 and close <= stopLossPrice)
+    strategy.close_all()
+    positionSize := positionSize * 2
+
+if (strategy.position_size > 0 and close >= profitTargetPrice)
+    strategy.close_all()
+    positionSize := positionSize * 2
+
+if (longCondition)
+    strategy.entry("Long", strategy.long, qty = positionSize)

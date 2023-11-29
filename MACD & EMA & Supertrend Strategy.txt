@@ -1,0 +1,46 @@
+//@version=5
+strategy("MACD & EMA & Supertrend Strategy", shorttitle="MACD & EMA & Supertrend Strategy", overlay=true, process_orders_on_close = true, calc_on_every_tick = true)
+
+//MACD inputs
+fastLength = input(12)
+slowLength = input(26)
+MACDLength = input(9)
+
+//EMA inputs
+EMA1 = input(12)
+EMA2 = input(26)
+
+//Supertrend inputs
+atrPeriod = input(10, "ATR Length")
+factor = input.float(3.0, "Factor", step = 0.01)
+
+//MACD calculation
+MACD = ta.ema(close, fastLength) - ta.ema(close, slowLength)
+aMACD = ta.ema(MACD, MACDLength)
+delta = MACD - aMACD
+
+//EMA calculation
+ema1 = ta.ema(close, EMA1)
+ema2 = ta.ema(close, EMA2)
+
+//Supertrend calculation
+[supertrend, direction] = ta.supertrend(factor, atrPeriod)
+
+supertrend := barstate.isfirst ? na : supertrend
+upTrend =    plot(direction < 0 ? supertrend : na, "Up Trend",   color = color.green, style = plot.style_linebr)
+downTrend =  plot(direction < 0 ? na : supertrend, "Down Trend", color = color.red,   style = plot.style_linebr)
+bodyMiddle = plot(barstate.isfirst ? na : (open + close) / 2, "Body Middle",display = display.none)
+
+fill(bodyMiddle, upTrend,   color.new(color.green, 90), fillgaps = false)
+fill(bodyMiddle, downTrend, color.new(color.red,   90), fillgaps = false)
+
+//Buy and Sell condiditons
+buyCondition = ta.crossover(delta, 0) and close > ema1 and close > ema2 and ta.change(direction) < 0
+sellCondition = ta.crossunder(delta, 0) and close < ema1 and close < ema2 and ta.change(direction) > 0
+
+//Strategy entries
+if (buyCondition)
+    strategy.entry("LE", strategy.long, comment="AL")
+
+if (sellCondition)
+    strategy.entry("SE", strategy.short, comment="SAT")

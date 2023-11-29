@@ -1,0 +1,452 @@
+//@version=5
+indicator('SSL + QQE + RSI Indicator Fixed', overlay=true)
+
+show_Baseline = input.bool(title='Show Baseline', defval=true, group='SSL')
+show_SSL1 = input.bool(title='Show SSL1', defval=false, group='SSL')
+show_atr = input.bool(title='Show ATR bands', defval=true, group='SSL')
+//ATR
+atrlen = input.int(14, 'ATR Period', group='SSL')
+multssl = input.float(1, 'ATR Multi', step=0.1, group='SSL')
+smoothing = input.string(title='ATR Smoothing', defval='WMA', options=['RMA', 'SMA', 'EMA', 'WMA'], group='SSL')
+
+ma_function(source, atrlen) =>
+    if smoothing == 'RMA'
+        ta.rma(source, atrlen)
+    else
+        if smoothing == 'SMA'
+            ta.sma(source, atrlen)
+        else
+            if smoothing == 'EMA'
+                ta.ema(source, atrlen)
+            else
+                ta.wma(source, atrlen)
+atr_slen = ma_function(ta.tr(true), atrlen)
+////ATR Up/Low Bands
+upper_band = atr_slen * multssl + close
+lower_band = close - atr_slen * multssl
+
+////BASELINE / SSL1 / SSL2 / EXIT MOVING AVERAGE VALUES
+maType = input.string(title='SSL1 / Baseline Type', defval='HMA', options=['SMA', 'EMA', 'DEMA', 'TEMA', 'LSMA', 'WMA', 'MF', 'VAMA', 'TMA', 'HMA', 'JMA', 'Kijun v2', 'EDSMA', 'McGinley'], group='SSL')
+len = input.int(title='SSL1 / Baseline Length', defval=60, group='SSL')
+
+SSL2Type = input.string(title='SSL2 / Continuation Type', defval='JMA', options=['SMA', 'EMA', 'DEMA', 'TEMA', 'WMA', 'MF', 'VAMA', 'TMA', 'HMA', 'JMA', 'McGinley'], group='SSL')
+len2 = input.int(title='SSL 2 Length', defval=5, group='SSL')
+//
+SSL3Type = input.string(title='EXIT Type', defval='HMA', options=['DEMA', 'TEMA', 'LSMA', 'VAMA', 'TMA', 'HMA', 'JMA', 'Kijun v2', 'McGinley', 'MF'], group='SSL')
+len3 = input.int(title='EXIT Length', defval=15, group='SSL')
+src_ssl = input.source(title='Source', defval=close, group='SSL')
+
+//
+tema(src_ssl, len) =>
+    ema1 = ta.ema(src_ssl, len)
+    ema2 = ta.ema(ema1, len)
+    ema3 = ta.ema(ema2, len)
+    3 * ema1 - 3 * ema2 + ema3
+kidiv = input.int(defval=1, maxval=4, title='Kijun MOD Divider')
+
+jurik_phase = input.int(title='* Jurik (JMA) Only - Phase', defval=3, group='SSL')
+jurik_power = input.int(title='* Jurik (JMA) Only - Power', defval=1, group='SSL')
+volatility_lookback = input.int(10, title='* Volatility Adjusted (VAMA) Only - Volatility lookback length', group='SSL')
+//MF
+beta = input.float(0.8, minval=0, maxval=1, step=0.1, title='Modular Filter, General Filter Only - Beta', group='SSL')
+feedback = input.bool(false, title='Modular Filter Only - Feedback', group='SSL')
+z = input.float(0.5, title='Modular Filter Only - Feedback Weighting', step=0.1, minval=0, maxval=1, group='SSL')
+//EDSMA
+ssfLength = input.int(title='EDSMA - Super Smoother Filter Length', minval=1, defval=20, group='SSL')
+ssfPoles = input.int(title='EDSMA - Super Smoother Filter Poles', defval=2, options=[2, 3], group='SSL')
+
+//----
+
+//EDSMA
+get2PoleSSF(src_ssl, length) =>
+    PI = 2 * math.asin(1)
+    arg = math.sqrt(2) * PI / length
+    a1 = math.exp(-arg)
+    b1 = 2 * a1 * math.cos(arg)
+    c2 = b1
+    c3 = -math.pow(a1, 2)
+    c1 = 1 - c2 - c3
+
+    ssf = 0.0
+    ssf := c1 * src_ssl + c2 * nz(ssf[1]) + c3 * nz(ssf[2])
+    ssf
+
+get3PoleSSF(src_ssl, length) =>
+    PI = 2 * math.asin(1)
+
+    arg = PI / length
+    a1 = math.exp(-arg)
+    b1 = 2 * a1 * math.cos(1.738 * arg)
+    c1 = math.pow(a1, 2)
+
+    coef2 = b1 + c1
+    coef3 = -(c1 + b1 * c1)
+    coef4 = math.pow(c1, 2)
+    coef1 = 1 - coef2 - coef3 - coef4
+
+    ssf = 0.0
+    ssf := coef1 * src_ssl + coef2 * nz(ssf[1]) + coef3 * nz(ssf[2]) + coef4 * nz(ssf[3])
+    ssf
+
+ma(type, src_ssl, len) =>
+    float result = 0
+    if type == 'TMA'
+        result := ta.sma(ta.sma(src_ssl, math.ceil(len / 2)), math.floor(len / 2) + 1)
+        result
+    if type == 'MF'
+        ts = 0.
+        b = 0.
+        c = 0.
+        os = 0.
+        //----
+        alpha = 2 / (len + 1)
+        a = feedback ? z * src_ssl + (1 - z) * nz(ts[1], src_ssl) : src_ssl
+        //----
+        b := a > alpha * a + (1 - alpha) * nz(b[1], a) ? a : alpha * a + (1 - alpha) * nz(b[1], a)
+        c := a < alpha * a + (1 - alpha) * nz(c[1], a) ? a : alpha * a + (1 - alpha) * nz(c[1], a)
+        os := a == b ? 1 : a == c ? 0 : os[1]
+        //----
+        upper = beta * b + (1 - beta) * c
+        lower = beta * c + (1 - beta) * b
+        ts := os * upper + (1 - os) * lower
+        result := ts
+        result
+    if type == 'LSMA'
+        result := ta.linreg(src_ssl, len, 0)
+        result
+    if type == 'SMA'  // Simple
+        result := ta.sma(src_ssl, len)
+        result
+    if type == 'EMA'  // Exponential
+        result := ta.ema(src_ssl, len)
+        result
+    if type == 'DEMA'  // Double Exponential
+        e = ta.ema(src_ssl, len)
+        result := 2 * e - ta.ema(e, len)
+        result
+    if type == 'TEMA'  // Triple Exponential
+        e = ta.ema(src_ssl, len)
+        result := 3 * (e - ta.ema(e, len)) + ta.ema(ta.ema(e, len), len)
+        result
+    if type == 'WMA'  // Weighted
+        result := ta.wma(src_ssl, len)
+        result
+    if type == 'VAMA'  // Volatility Adjusted
+        /// Copyright © 2019 to present, Joris Duyck (JD)
+        mid = ta.ema(src_ssl, len)
+        dev = src_ssl - mid
+        vol_up = ta.highest(dev, volatility_lookback)
+        vol_down = ta.lowest(dev, volatility_lookback)
+        result := mid + math.avg(vol_up, vol_down)
+        result
+    if type == 'HMA'  // Hull
+        result := ta.wma(2 * ta.wma(src_ssl, len / 2) - ta.wma(src_ssl, len), math.round(math.sqrt(len)))
+        result
+    if type == 'JMA'  // Jurik
+        /// Copyright © 2018 Alex Orekhov (everget)
+        /// Copyright © 2017 Jurik Research and Consulting.
+        phaseRatio = jurik_phase < -100 ? 0.5 : jurik_phase > 100 ? 2.5 : jurik_phase / 100 + 1.5
+        // beta = 0.45 * (len - 1) / (0.45 * (len - 1) + 2)
+        alpha = math.pow(beta, jurik_power)
+        jma = 0.0
+        e0 = 0.0
+        e0 := (1 - alpha) * src_ssl + alpha * nz(e0[1])
+        e1 = 0.0
+        e1 := (src_ssl - e0) * (1 - beta) + beta * nz(e1[1])
+        e2 = 0.0
+        e2 := (e0 + phaseRatio * e1 - nz(jma[1])) * math.pow(1 - alpha, 2) + math.pow(alpha, 2) * nz(e2[1])
+        jma := e2 + nz(jma[1])
+        result := jma
+        result
+    if type == 'Kijun v2'
+        kijun = math.avg(ta.lowest(len), ta.highest(len))  //, (open + close)/2)
+        conversionLine = math.avg(ta.lowest(len / kidiv), ta.highest(len / kidiv))
+        delta = (kijun + conversionLine) / 2
+        result := delta
+        result
+    if type == 'McGinley'
+        mg = 0.0
+        mg := na(mg[1]) ? ta.ema(src_ssl, len) : mg[1] + (src_ssl - mg[1]) / (len * math.pow(src_ssl / mg[1], 4))
+        result := mg
+        result
+    if type == 'EDSMA'
+
+        zeros = src_ssl - nz(src_ssl[2])
+        avgZeros = (zeros + zeros[1]) / 2
+
+        // Ehlers Super Smoother Filter 
+        ssf = ssfPoles == 2 ? get2PoleSSF(avgZeros, ssfLength) : get3PoleSSF(avgZeros, ssfLength)
+
+        // Rescale filter in terms of Standard Deviations
+        stdev = ta.stdev(ssf, len)
+        scaledFilter = stdev != 0 ? ssf / stdev : 0
+
+        alpha = 5 * math.abs(scaledFilter) / len
+
+        edsma = 0.0
+        edsma := alpha * src_ssl + (1 - alpha) * nz(edsma[1])
+        result := edsma
+        result
+    result
+
+///SSL 1 and SSL2
+emaHigh = ma(maType, high, len)
+emaLow = ma(maType, low, len)
+
+maHigh = ma(SSL2Type, high, len2)
+maLow = ma(SSL2Type, low, len2)
+
+///EXIT
+ExitHigh = ma(SSL3Type, high, len3)
+ExitLow = ma(SSL3Type, low, len3)
+
+///Keltner Baseline Channel
+BBMC = ma(maType, close, len)
+useTrueRange = input(true)
+multy = input.float(0.2, step=0.05, title='Base Channel Multiplier', group='SSL')
+Keltma = ma(maType, src_ssl, len)
+range_1 = useTrueRange ? ta.tr : high - low
+rangema = ta.ema(range_1, len)
+upperk = Keltma + rangema * multy
+lowerk = Keltma - rangema * multy
+
+//Baseline Violation Candle
+open_pos = open * 1
+close_pos = close * 1
+difference = math.abs(close_pos - open_pos)
+atr_violation = difference > atr_slen
+InRange = upper_band > BBMC and lower_band < BBMC
+candlesize_violation = atr_violation and InRange
+plotshape(candlesize_violation, color=color.new(color.white, 0), size=size.tiny, style=shape.diamond, location=location.top, title='Candle Size > 1xATR', display=display.none)
+
+
+//SSL1 VALUES
+Hlv = int(na)
+Hlv := close > emaHigh ? 1 : close < emaLow ? -1 : Hlv[1]
+sslDown = Hlv < 0 ? emaHigh : emaLow
+
+//SSL2 VALUES
+Hlv2 = int(na)
+Hlv2 := close > maHigh ? 1 : close < maLow ? -1 : Hlv2[1]
+sslDown2 = Hlv2 < 0 ? maHigh : maLow
+
+//EXIT VALUES
+Hlv3 = int(na)
+Hlv3 := close > ExitHigh ? 1 : close < ExitLow ? -1 : Hlv3[1]
+sslExit = Hlv3 < 0 ? ExitHigh : ExitLow
+base_cross_Long = ta.crossover(close, sslExit)
+base_cross_Short = ta.crossover(sslExit, close)
+codiff = base_cross_Long ? 1 : base_cross_Short ? -1 : na
+
+//COLORS
+show_multcolor_bar_ssl = input.bool(title='Color Bars', defval=true, group='SSL')
+multcolor_bar_ssl = close > upperk ? #00c3ff : close < lowerk ? #ff0062 : color.gray
+color_ssl1 = close > sslDown ? #00c3ff : close < sslDown ? #ff0062 : na
+
+//PLOTS
+plotarrow(codiff, colorup=color.new(#00c3ff, 35), colordown=color.new(#ff0062, 35), title='Exit Arrows', maxheight=20, offset=0)
+p1 = plot(show_Baseline ? BBMC : na, color=multcolor_bar_ssl, linewidth=4, title='MA Baseline', display=display.none)
+DownPlot = plot(show_SSL1 ? sslDown : na, title='SSL1', linewidth=3, color=color_ssl1, display=display.none)
+barcolor(show_multcolor_bar_ssl ? multcolor_bar_ssl : na)
+up_channel = plot(show_Baseline ? upperk : na, color=multcolor_bar_ssl, title='Baseline Upper Channel', display=display.none)
+low_channel = plot(show_Baseline ? lowerk : na, color=multcolor_bar_ssl, title='Basiline Lower Channel', display=display.none)
+
+myColor = color.new(color=color.blue, transp=90)
+fill(up_channel, low_channel, color=myColor)
+
+////SSL2 Continiuation from ATR
+atr_crit = input.float(0.9, step=0.1, title='Continuation ATR Criteria', group='SSL')
+upper_half = atr_slen * atr_crit + close
+lower_half = close - atr_slen * atr_crit
+buy_inatr = lower_half < sslDown2
+sell_inatr = upper_half > sslDown2
+sell_cont = close < BBMC and close < sslDown2
+buy_cont = close > BBMC and close > sslDown2
+sell_atr = sell_inatr and sell_cont
+buy_atr = buy_inatr and buy_cont
+atr_fill = buy_atr ? color.green : sell_atr ? color.purple : color.white
+LongPlot = plot(sslDown2, title='SSL2', linewidth=2, color=atr_fill, style=plot.style_circles, display=display.none)
+u = plot(show_atr ? upper_band : na, '+ATR', color=color.new(color.white, 0), display=display.none)
+l = plot(show_atr ? lower_band : na, '-ATR', color=color.new(color.white, 0), display=display.none)
+
+
+// --------------------------------------
+
+RSI_Period = input.int(6, title='RSI Length', group='QQE')
+SF = input.int(5, title='RSI Smoothing', group='QQE')
+QQE = input.int(3, title='Fast QQE Factor', group='QQE')
+ThreshHold = input.int(3, title='Thresh-hold', group='QQE')
+//
+src = input.source(close, title='RSI Source', group='QQE')
+//
+
+Wilders_Period = RSI_Period * 2 - 1
+Rsi = ta.rsi(src, RSI_Period)
+RsiMa = ta.ema(Rsi, SF)
+AtrRsi = math.abs(RsiMa[1] - RsiMa)
+MaAtrRsi = ta.ema(AtrRsi, Wilders_Period)
+dar = ta.ema(MaAtrRsi, Wilders_Period) * QQE
+
+longband = 0.0
+shortband = 0.0
+trend = 0
+
+DeltaFastAtrRsi = dar
+RSIndex = RsiMa
+
+newshortband = RSIndex + DeltaFastAtrRsi
+newlongband = RSIndex - DeltaFastAtrRsi
+
+longband := RSIndex[1] > longband[1] and RSIndex > longband[1] ? math.max(longband[1], newlongband) : newlongband
+shortband := RSIndex[1] < shortband[1] and RSIndex < shortband[1] ? math.min(shortband[1], newshortband) : newshortband
+
+cross_1 = ta.cross(longband[1], RSIndex)
+trend := ta.cross(RSIndex, shortband[1]) ? 1 : cross_1 ? -1 : nz(trend[1], 1)
+FastAtrRsiTL = trend == 1 ? longband : shortband
+
+////////////////////
+
+length = input.int(50, minval=1, title='Bollinger Length', group='QQE')
+mult = input.float(0.35, minval=0.001, maxval=5, step=0.1, title='BB Multiplier', group='QQE')
+basis = ta.sma(FastAtrRsiTL - 50, length)
+dev = mult * ta.stdev(FastAtrRsiTL - 50, length)
+upper = basis + dev
+lower = basis - dev
+color_bar = RsiMa - 50 > upper ? #00c3ff : RsiMa - 50 < lower ? #ff0062 : color.gray
+
+// Zero cross
+
+QQEzlong = 0
+QQEzlong := nz(QQEzlong[1])
+QQEzshort = 0
+QQEzshort := nz(QQEzshort[1])
+QQEzlong := RSIndex >= 50 ? QQEzlong + 1 : 0
+QQEzshort := RSIndex < 50 ? QQEzshort + 1 : 0
+
+//
+
+Zero = hline(0, color=color.white, linestyle=hline.style_dotted, linewidth=1, display = display.none)
+
+////////////////////////////////////////////////////////////////
+
+RSI_Period2 = input.int(6, title='RSI Length', group='QQE')
+SF2 = input.int(5, title='RSI Smoothing', group='QQE')
+QQE2 = input.float(1.61, title='Fast QQE2 Factor', group='QQE')
+ThreshHold2 = input.int(3, title='Thresh-hold', group='QQE')
+src2 = input.source(close, title='RSI Source', group='QQE')
+
+//
+
+Wilders_Period2 = RSI_Period2 * 2 - 1
+Rsi2 = ta.rsi(src2, RSI_Period2)
+RsiMa2 = ta.ema(Rsi2, SF2)
+AtrRsi2 = math.abs(RsiMa2[1] - RsiMa2)
+MaAtrRsi2 = ta.ema(AtrRsi2, Wilders_Period2)
+dar2 = ta.ema(MaAtrRsi2, Wilders_Period2) * QQE2
+
+longband2 = 0.0
+shortband2 = 0.0
+trend2 = 0
+
+DeltaFastAtrRsi2 = dar2
+RSIndex2 = RsiMa2
+newshortband2 = RSIndex2 + DeltaFastAtrRsi2
+newlongband2 = RSIndex2 - DeltaFastAtrRsi2
+longband2 := RSIndex2[1] > longband2[1] and RSIndex2 > longband2[1] ? math.max(longband2[1], newlongband2) : newlongband2
+shortband2 := RSIndex2[1] < shortband2[1] and RSIndex2 < shortband2[1] ? math.min(shortband2[1], newshortband2) : newshortband2
+
+cross_2 = ta.cross(longband2[1], RSIndex2)
+trend2 := ta.cross(RSIndex2, shortband2[1]) ? 1 : cross_2 ? -1 : nz(trend2[1], 1)
+FastAtrRsi2TL = trend2 == 1 ? longband2 : shortband2
+//
+
+// Zero cross
+
+QQE2zlong = 0
+QQE2zlong := nz(QQE2zlong[1])
+QQE2zshort = 0
+QQE2zshort := nz(QQE2zshort[1])
+QQE2zlong := RSIndex2 >= 50 ? QQE2zlong + 1 : 0
+QQE2zshort := RSIndex2 < 50 ? QQE2zshort + 1 : 0
+
+//
+
+// base_cross_Long , not (close > upperk) and not (close < upperk) and not (Greenbar1 and Greenbar2 == 1) and not (Redbar1 and Redbar2 == 1)
+
+hcolor2 = RsiMa2 - 50 > ThreshHold2 ? color.silver : RsiMa2 - 50 < 0 - ThreshHold2 ? color.silver : na
+
+Greenbar1 = RsiMa2 - 50 > ThreshHold2
+Greenbar2 = RsiMa - 50 > upper
+
+Redbar1 = RsiMa2 - 50 < 0 - ThreshHold2
+Redbar2 = RsiMa - 50 < lower
+
+// -------------------------------------------
+
+rsi_period = input.int(title='Rsi period', defval=14, group='RSI')
+rsi_source = input.source(title='Rsi source', defval=close, group='RSI')
+rsi_value = ta.rsi(rsi_source, rsi_period)
+
+plot(rsi_value, color=color.new(color.silver, 100), title="RSI")
+
+rsi_level_long = input.int(title='Rsi level long', defval=50, group='RSI')
+rsi_level_short = input.int(title='Rsi level short', defval=50, group='RSI')
+
+//CONDS
+var bool inLongPosition = na
+var bool inShortPosition = na
+
+longCondOne = not(Greenbar1 and Greenbar2 == 1) and not(Redbar1 and Redbar2 == 1) and not(RsiMa2 - 50 > ThreshHold2) and not(RsiMa2 - 50 < 0 - ThreshHold2) and rsi_value >= rsi_level_long and base_cross_Long
+longCondTwo = base_cross_Long and not(close > upperk) and not(close < lowerk) and not(Greenbar1 and Greenbar2 == 1) and not(Redbar1 and Redbar2 == 1) and rsi_value >= rsi_level_long
+
+shortCondOne = base_cross_Short and not(Greenbar1 and Greenbar2 == 1) and not(Redbar1 and Redbar2 == 1) and not(RsiMa2 - 50 > ThreshHold2) and not(RsiMa2 - 50 < 0 - ThreshHold2) and rsi_value < rsi_level_short
+shortCondTwo = base_cross_Short and not(close > upperk) and not(close < lowerk) and not(Greenbar1 and Greenbar2 == 1) and not(Redbar1 and Redbar2 == 1) and rsi_value < rsi_level_short
+
+longEntry = (longCondOne or longCondTwo) and barstate.isconfirmed and not inLongPosition
+
+shortEntry = (shortCondOne or shortCondTwo) and barstate.isconfirmed and not inShortPosition
+
+
+
+if longEntry and not inLongPosition
+    inLongPosition := true
+    inShortPosition := na
+
+if shortEntry and not inShortPosition
+    inShortPosition := true
+    inLongPosition := na
+
+var bool isShortExitReady = false
+if ta.crossunder(rsi_value, 30) and inShortPosition
+    isShortExitReady := true
+    isShortExitReady
+
+var bool isLongExitReady = false
+if ta.crossover(rsi_value, 70) and inLongPosition
+    isLongExitReady := true
+    isLongExitReady
+
+
+rsiCondUnder = ta.crossunder(rsi_value, 68) and isLongExitReady and barstate.isconfirmed and inLongPosition
+rsiCondOver = ta.crossover(rsi_value, 32) and isShortExitReady and barstate.isconfirmed and inShortPosition
+
+if rsiCondOver and inShortPosition
+    isShortExitReady := false
+    inShortPosition := na
+
+if rsiCondUnder and inLongPosition
+    isLongExitReady := false
+    inLongPosition := na
+
+//PLOTS //
+plotshape(series=longEntry, title='Long Signal', location=location.belowbar, color=color.green, style=shape.triangleup, text="Long", textcolor=color.green)
+plotshape(series=shortEntry, title='Short Signal', location=location.abovebar, color=color.red, style=shape.triangledown, text="Short", textcolor=color.red)
+plotshape(series=rsiCondOver, title='RSI short close signal', location=location.belowbar, color=color.blue, style=shape.triangleup, text="RSI SHORT CLOSE", textcolor=color.blue)
+plotshape(series=rsiCondUnder, title='RSI long close signal', location=location.abovebar, color=color.blue, style=shape.triangledown, text="RSI LONG CLOSE", textcolor=color.blue)
+
+// ALERTS
+alertcondition(condition=longEntry, title="Buy Signal", message="Long Entry Signal")
+alertcondition(condition=shortEntry, title="Sell Signal", message="Short Entry Signal")
+alertcondition(condition=rsiCondOver, title="RSI Short Close Signal", message="RSI Short Close Signal")
+alertcondition(condition=rsiCondUnder, title="RSI Long Close Signal", message="RSI Long Close Signal")
+

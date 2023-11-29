@@ -1,0 +1,291 @@
+//@version=5
+indicator(title='Kernel Regression Toolkit', shorttitle='kreg', overlay = true)
+import veryfid/KernelFunctionsFilters/1 as kreg
+
+src = input(close)
+
+filt1 = input.string("Smooth", options = ["No Filter", "Smooth", "Zero Lag"],title = "",group ="Kernel Regression 1 - Fast", inline = "k", tooltip = "Select Kernel Regression type from dropdown box. The Lookback Window is the number of bars used for the estimation. This is a sliding value that represents the most recent historical bars. Recommended range: 3-50 ") 
+type1 = input.string("Rational Quadratic", options = ["Rational Quadratic", "Gaussian", "Periodic", "Locally Periodic"],title = "",group ="Kernel Regression 1 - Fast", inline = "k", tooltip = "Select Kernel Regression type from dropdown box. The Lookback Window is the number of bars used for the estimation. This is a sliding value that represents the most recent historical bars. Recommended range: 3-50 ") 
+h = input.int(3, 'Lookback Window', minval=3, group="Kernel Regression 1 - Fast", inline="k")
+r = input.float(1., 'Weighting', step=0.25, tooltip='Relative weighting of time frames. As this value approaches zero, the longer time frames will exert more influence on the estimation. As this value approaches infinity, the behavior of the Rational Quadratic Kernel will become identical to the Gaussian kernel. Recommended range: 0.25-25', group="Kernel Regression 1 - Fast", inline="k1")
+x = input.int(2, "Level", tooltip='Bar index on which to start regression. Controls how tightly fit the kernel estimate is to the data. Smaller values are a tighter fit. Larger values are a looser fit. Recommended range: 2-25', group="Kernel Regression 1 - Fast", inline="k1")
+lag = input.int(2, "Lag", tooltip="Lag for crossover detection. Lower values result in earlier crossovers. Recommended range: 1-2", inline='k1', group="Kernel Regression 1 - Fast")
+
+filt2 = input.string("Smooth", options = ["No Filter", "Smooth", "Zero Lag"],title = "",group ="Kernel Regression 2 - Medium", inline = "k", tooltip = "Select Kernel Regression type from dropdown box. The Lookback Window is the number of bars used for the estimation. This is a sliding value that represents the most recent historical bars. Recommended range: 3-50 ") 
+type2 = input.string("Rational Quadratic", options = ["Rational Quadratic", "Gaussian", "Periodic", "Locally Periodic"],title = "",group ="Kernel Regression 2 - Medium", inline = "k", tooltip = "Select Kernel Regression type from dropdown box. The Lookback Window is the number of bars used for the estimation. This is a sliding value that represents the most recent historical bars. Recommended range: 3-50 ") 
+h2 = input.int(8, 'Lookback Window', minval=3, tooltip='The number of bars used for the estimation. This is a sliding value that represents the most recent historical bars. Recommended range: 3-50', group="Kernel Regression 2 - Medium", inline="k")
+r2 = input.float(1., 'Weighting', step=0.25, tooltip='Relative weighting of time frames. As this value approaches zero, the longer time frames will exert more influence on the estimation. As this value approaches infinity, the behavior of the Rational Quadratic Kernel will become identical to the Gaussian kernel. Recommended range: 0.25-25', group="Kernel Regression 2 - Medium", inline="kernel2")
+x2 = input.int(20, "Level", tooltip='Bar index on which to start regression. Controls how tightly fit the kernel estimate is to the data. Smaller values are a tighter fit. Larger values are a looser fit. Recommended range: 2-25', group="Kernel Regression 2 - Medium", inline="kernel2")
+lag2 = input.int(2, "Lag", tooltip="Lag for crossover detection. Lower values result in earlier crossovers. Recommended range: 1-2", inline='kernel2', group='Kernel Regression 2 - Medium')
+
+filt3 = input.string("Smooth", options = ["No Filter", "Smooth", "Zero Lag"],title = "",group ="Kernel Regression 3 - Slow", inline = "k", tooltip = "Select Kernel Regression type from dropdown box. The Lookback Window is the number of bars used for the estimation. This is a sliding value that represents the most recent historical bars. Recommended range: 3-50 ") 
+type3 = input.string("Rational Quadratic", options = ["Rational Quadratic", "Gaussian", "Periodic", "Locally Periodic"],title = "",group ="Kernel Regression 3 - Slow", inline = "k", tooltip = "Select Kernel Regression type from dropdown box. The Lookback Window is the number of bars used for the estimation. This is a sliding value that represents the most recent historical bars. Recommended range: 3-50 ") 
+h3 = input.int(200, 'Lookback Window', minval=3, tooltip='The number of bars used for the estimation. This is a sliding value that represents the most recent historical bars. Recommended range: 3-50', group="Kernel Regression 3 - Slow", inline="k")
+r3 = input.float(1., 'Weighting', step=0.25, tooltip='Relative weighting of time frames. As this value approaches zero, the longer time frames will exert more influence on the estimation. As this value approaches infinity, the behavior of the Rational Quadratic Kernel will become identical to the Gaussian kernel. Recommended range: 0.25-25', group="Kernel Regression 3 - Slow", inline="kernel3")
+x3 = input.int(500, "Level", tooltip='Bar index on which to start regression. Controls how tightly fit the kernel estimate is to the data. Smaller values are a tighter fit. Larger values are a looser fit. Recommended range: 2-25', group="Kernel Regression 3 - Slow", inline="kernel3")
+lag3 = input.int(2, "Lag", tooltip="Lag for crossover detection. Lower values result in earlier crossovers. Recommended range: 1-2", inline='kernel3', group='Kernel Regression 3 - Slow')
+
+filt4 = input.string("Smooth", options = ["No Filter", "Smooth", "Zero Lag"],title = "",group ="Kernel Regression 4 - Mono", inline = "k", tooltip = "Select Kernel Regression type from dropdown box. The Lookback Window is the number of bars used for the estimation. This is a sliding value that represents the most recent historical bars. Recommended range: 3-50 ") 
+type4 = input.string("Rational Quadratic", options = ["Rational Quadratic", "Gaussian", "Periodic", "Locally Periodic"],title = "",group ="Kernel Regression 4 - Mono", inline = "k", tooltip = "Select Kernel Regression type from dropdown box. The Lookback Window is the number of bars used for the estimation. This is a sliding value that represents the most recent historical bars. Recommended range: 3-50 ") 
+h4 = input.int(30, 'Lookback Window', minval=3, group="Kernel Regression 4 - Mono", inline="k")
+r4 = input.float(8., 'Weighting', step=0.25, tooltip='Relative weighting of time frames. As this value approaches zero, the longer time frames will exert more influence on the estimation. As this value approaches infinity, the behavior of the Rational Quadratic Kernel will become identical to the Gaussian kernel. Recommended range: 0.25-25', group="Kernel Regression 4 - Mono", inline="k1")
+x4 = input.int(35, "Level", tooltip='Bar index on which to start regression. Controls how tightly fit the kernel estimate is to the data. Smaller values are a tighter fit. Larger values are a looser fit. Recommended range: 2-25', group="Kernel Regression 4 - Mono", inline="k1")
+lag4 = input.int(2, "Lag", tooltip="Lag for crossover detection. Lower values result in earlier crossovers. Recommended range: 1-2", inline='k1', group="Kernel Regression 4 - Mono")
+
+filt5 = input.string("Smooth", options = ["No Filter", "Smooth", "Zero Lag"],title = "",group ="Kernel Regression 5 - Mono", inline = "k", tooltip = "Select Kernel Regression type from dropdown box. The Lookback Window is the number of bars used for the estimation. This is a sliding value that represents the most recent historical bars. Recommended range: 3-50 ") 
+type5 = input.string("Rational Quadratic", options = ["Rational Quadratic", "Gaussian", "Periodic", "Locally Periodic"],title = "",group ="Kernel Regression 5 - Mono", inline = "k", tooltip = "Select Kernel Regression type from dropdown box. The Lookback Window is the number of bars used for the estimation. This is a sliding value that represents the most recent historical bars. Recommended range: 3-50 ") 
+h5 = input.int(69, 'Lookback Window', minval=3, group="Kernel Regression 5 - Mono", inline="k")
+r5 = input.float(1, 'Weighting', step=0.25, tooltip='Relative weighting of time frames. As this value approaches zero, the longer time frames will exert more influence on the estimation. As this value approaches infinity, the behavior of the Rational Quadratic Kernel will become identical to the Gaussian kernel. Recommended range: 0.25-25', group="Kernel Regression 5 - Mono", inline="k1")
+x5 = input.int(500, "Level", tooltip='Bar index on which to start regression. Controls how tightly fit the kernel estimate is to the data. Smaller values are a tighter fit. Larger values are a looser fit. Recommended range: 2-25', group="Kernel Regression 5 - Mono", inline="k1")
+lag5 = input.int(2, "Lag", tooltip="Lag for crossover detection. Lower values result in earlier crossovers. Recommended range: 1-2", inline='k1', group="Kernel Regression 5 - Mono")
+
+filt6 = input.string("Zero Lag", options = ["No Filter", "Smooth", "Zero Lag"],title = "",group ="Kernel Regression 6 - Mono", inline = "k", tooltip = "Select Kernel Regression type from dropdown box. The Lookback Window is the number of bars used for the estimation. This is a sliding value that represents the most recent historical bars. Recommended range: 3-50 ") 
+type6 = input.string("Rational Quadratic", options = ["Rational Quadratic", "Gaussian", "Periodic", "Locally Periodic"],title = "",group ="Kernel Regression 6 - Mono", inline = "k", tooltip = "Select Kernel Regression type from dropdown box. The Lookback Window is the number of bars used for the estimation. This is a sliding value that represents the most recent historical bars. Recommended range: 3-50 ") 
+h6 = input.int(200, 'Lookback Window', minval=3, group="Kernel Regression 6 - Mono", inline="k")
+r6 = input.float(1., 'Weighting', step=0.25, tooltip='Relative weighting of time frames. As this value approaches zero, the longer time frames will exert more influence on the estimation. As this value approaches infinity, the behavior of the Rational Quadratic Kernel will become identical to the Gaussian kernel. Recommended range: 0.25-25', group="Kernel Regression 6 - Mono", inline="k1")
+x6 = input.int(500, "Level", tooltip='Bar index on which to start regression. Controls how tightly fit the kernel estimate is to the data. Smaller values are a tighter fit. Larger values are a looser fit. Recommended range: 2-25', group="Kernel Regression 6 - Mono", inline="k1")
+lag6 = input.int(2, "Lag", tooltip="Lag for crossover detection. Lower values result in earlier crossovers. Recommended range: 1-2", inline='k1', group="Kernel Regression 6 - Mono")
+
+ksrc = kreg.rationalQuadratic(close, 3, 1, 1, "No FIlter")
+line1 = type1 == "Rational Quadratic" ? kreg.rationalQuadratic(src, h, r, x, filt1) : type1 == "Gaussian" ? kreg.gaussian(src, h-lag, x, filt1) : type1 == "Periodic" ? kreg.periodic(src, h, lag, x, filt1) : type1 == "Locally Periodic" ? kreg.locallyPeriodic(src, h, lag, x, filt1) : na
+line2 = type2 == "Rational Quadratic" ? kreg.rationalQuadratic(src, h2, r2, x2, filt2) : type2 == "Gaussian" ? kreg.gaussian(src, h2-lag2, x2, filt2) : type2 == "Periodic" ? kreg.periodic(src, h2, lag2, x2, filt2) : type2 == "Locally Periodic" ? kreg.locallyPeriodic(src, h2, lag2, x2, filt2) : na
+line3 = type3 == "Rational Quadratic" ? kreg.rationalQuadratic(src, h3, r3, x3, filt3) : type3 == "Gaussian" ? kreg.gaussian(src, h3-lag3, x3, filt3) : type3 == "Periodic" ? kreg.periodic(src, h3, lag3, x3, filt3) : type3 == "Locally Periodic" ? kreg.locallyPeriodic(src, h3, lag3, x3, filt3) : na
+line4 = type4 == "Rational Quadratic" ? kreg.rationalQuadratic(src, h4, r4, x4, filt4) : type4 == "Gaussian" ? kreg.gaussian(src, h4-lag4, x4, filt4) : type4 == "Periodic" ? kreg.periodic(src, h4, lag4, x4, filt4) : type4 == "Locally Periodic" ? kreg.locallyPeriodic(src, h4, lag4, x4, filt4) : na
+line5 = type5 == "Rational Quadratic" ? kreg.rationalQuadratic(src, h5, r5, x5, filt5) : type5 == "Gaussian" ? kreg.gaussian(src, h5-lag5, x5, filt5) : type5 == "Periodic" ? kreg.periodic(src, h5, lag5, x5, filt5) : type5 == "Locally Periodic" ? kreg.locallyPeriodic(src, h5, lag5, x5, filt5) : na
+line6 = type6 == "Rational Quadratic" ? kreg.rationalQuadratic(src, h6, r6, x6, filt6) : type6 == "Gaussian" ? kreg.gaussian(src, h6-lag6, x6, filt6) : type6 == "Periodic" ? kreg.periodic(src, h6, lag6, x6, filt6) : type6 == "Locally Periodic" ? kreg.locallyPeriodic(src, h6, lag6, x6, filt6) : na
+
+usej1 = input(false,"Show J line 1",group ="J Line 1", inline = "k")
+jline1src1 = input.string("Line 2", options = ["Line 1", "Line 2", "Line 3", "Line 4", "Line 5", "Line 6","Close"],title = "",group ="J Line 1", inline = "k", tooltip = "Select Kernel Regression type from dropdown box. The Lookback Window is the number of bars used for the estimation. This is a sliding value that represents the most recent historical bars. Recommended range: 3-50 ") 
+jline1src2 = input.string("Line 4", options = ["Line 1", "Line 2", "Line 3", "Line 4", "Line 5", "Line 6","Close"],title = "",group ="J Line 1", inline = "k", tooltip = "Select Kernel Regression type from dropdown box. The Lookback Window is the number of bars used for the estimation. This is a sliding value that represents the most recent historical bars. Recommended range: 3-50 ") 
+jline1a = jline1src1 == "Line 1" ? line1 : jline1src1 == "Line 2" ? line2 : jline1src1 == "Line 3" ? line3 : jline1src1 == "Line 4" ? line4 : jline1src1 == "Line 5" ? line5 : jline1src1 == "Line 6" ? line6 : jline1src1 == "Close" ? close : jline1src1 == "Ksrc" ? ksrc : ksrc 
+jline1b = jline1src2 == "Line 1" ? line1 : jline1src2 == "Line 2" ? line2 : jline1src2 == "Line 3" ? line3 : jline1src2 == "Line 4" ? line4 : jline1src2 == "Line 5" ? line5 : jline1src2 == "Line 6" ? line6 : jline1src2 == "Close" ? close : jline1src2 == "Ksrc" ? ksrc : ksrc 
+jline1 = kreg.j(jline1a,jline1b)
+
+usej2 = input(false,"Show J line 2",group ="J Line 2", inline = "k")
+jline2src1 = input.string("Line 3", options = ["Line 1", "Line 2", "Line 3", "Line 4", "Line 5", "Line 6","Close", "J Line 1"],title = "",group ="J Line 2", inline = "k", tooltip = "Select Kernel Regression type from dropdown box. The Lookback Window is the number of bars used for the estimation. This is a sliding value that represents the most recent historical bars. Recommended range: 3-50 ") 
+jline2src2 = input.string("Line 5", options = ["Line 1", "Line 2", "Line 3", "Line 4", "Line 5", "Line 6","Close", "J Line 1"],title = "",group ="J Line 2", inline = "k", tooltip = "Select Kernel Regression type from dropdown box. The Lookback Window is the number of bars used for the estimation. This is a sliding value that represents the most recent historical bars. Recommended range: 3-50 ") 
+jline2a = jline2src1 == "Line 1" ? line1 : jline2src1 == "Line 2" ? line2 : jline2src1 == "Line 3" ? line3 : jline2src1 == "Line 4" ? line4 : jline2src1 == "Line 5" ? line5 : jline2src1 == "Line 6" ? line6 : jline2src1 == "Close" ? close : jline2src1 == "J Line 1" ? jline1 : ksrc 
+jline2b = jline2src2 == "Line 1" ? line1 : jline2src2 == "Line 2" ? line2 : jline2src2 == "Line 3" ? line3 : jline2src2 == "Line 4" ? line4 : jline2src2 == "Line 5" ? line5 : jline2src2 == "Line 6" ? line6 : jline2src2 == "Close" ? close : jline2src2 == "J Line 1" ? jline1 : ksrc 
+
+jline2 = kreg.j(jline2a,jline2b)
+
+useblend = input(false,"Show",group ="Blend Two Lines", inline = "k")
+blendsrc1 = input.string("Line 2", options = ["Line 1", "Line 2", "Line 3", "Line 4", "Line 5", "Line 6","Close"],title = "",group ="Blend Two Lines", inline = "k", tooltip = "Select two Kernel Regression lines you would like to blend from the dropdown box. Adjust the percentage of the blend from 0-100%. It is also possible to overdrive the blend by pushing it over 100") 
+blendsrc2 = input.string("Line 4", options = ["Line 1", "Line 2", "Line 3", "Line 4", "Line 5", "Line 6","Close"],title = "",group ="Blend Two Lines", inline = "k")
+blenda = blendsrc1 == "Line 1" ? line1 : blendsrc1 == "Line 2" ? line2 : blendsrc1 == "Line 3" ? line3 : blendsrc1 == "Line 4" ? line4 : blendsrc1 == "Line 5" ? line5 : blendsrc1 == "Line 6" ? line6 : blendsrc1 == "Close" ? close : blendsrc1 == "Ksrc" ? ksrc : ksrc 
+blendb = blendsrc2 == "Line 1" ? line1 : blendsrc2 == "Line 2" ? line2 : blendsrc2 == "Line 3" ? line3 : blendsrc2 == "Line 4" ? line4 : blendsrc2 == "Line 5" ? line5 : blendsrc2 == "Line 6" ? line6 : blendsrc2 == "Close" ? close : blendsrc2 == "Ksrc" ? ksrc : ksrc 
+weight = input(50,"",group ="Blend Two Lines", inline = "k")
+weightcalc = weight/100
+blend = blenda*weightcalc + blendb * (1 - weightcalc)
+
+kernelCrossOver12 = ta.crossover(line1,line2)
+kernelCrossOver13 = ta.crossover(line1,line3)
+
+kernelCrossUnder12 = ta.crossunder(line1,line2)
+kernelCrossUnder13 = ta.crossunder(line1,line3)
+
+plot(line1,"Line1", color= line1 > line1[1] ? color.teal : color.red, linewidth=3)
+plot(line2,"Line2", color= line2 > line2[1] ? color.teal : color.red , linewidth=2)
+plot(line3,"Line3", color= line3 > line3[1] ? color.teal : color.red , linewidth=1)
+plot(line4,"Line4", color= color.rgb(120, 123, 134, 100), linewidth=1)
+plot(line5,"Line5", color= color.rgb(120, 123, 134, 100), linewidth=1)
+plot(line6,"Line6", color= color.rgb(120, 123, 134, 100), linewidth=1)
+
+plot(usej1 ? jline1 : na,"j1",color = color.white)
+plot(usej2 ? jline2 : na,"j2",color = color.white)
+
+plot(useblend ? blend : na,"Blend")
+
+//Ehlers Super Passband Filter
+
+fastLength = input.int(title='Fast Length', minval=1, defval=40)
+slowLength = input.int(title='Slow Length', minval=1, defval=60)
+src2 = input(title='Ehlers Source', defval=close)
+
+getESPF(src, fastLength, slowLength) =>
+    a1 = 5 / fastLength
+    a2 = 5 / slowLength
+
+    espf = 0.0
+    espf := (a1 - a2) * src + (a2 * (1 - a1) - a1 * (1 - a2)) * nz(src[1]) + (1 - a1 + 1 - a2) * nz(espf[1]) - (1 - a1) * (1 - a2) * nz(espf[2])
+    espf
+
+espf = getESPF(src, fastLength, slowLength)
+
+rms = math.sqrt(math.sum(espf * espf, 50) / 50)
+
+
+//Nadaraya Watson
+
+h7 = input.float(8., 'Lookback Window', minval=3., tooltip='The number of bars used for the estimation. This is a sliding value that represents the most recent historical bars. Recommended range: 3-50')
+r7 = input.float(8., 'Relative Weighting', step=0.25, tooltip='Relative weighting of time frames. As this value approaches zero, the longer time frames will exert more influence on the estimation. As this value approaches infinity, the behavior of the Rational Quadratic Kernel will become identical to the Gaussian kernel. Recommended range: 0.25-25')
+x_0 = input.int(25, "Start Regression at Bar", tooltip='Bar index on which to start regression. The first bars of a chart are often highly volatile, and omission of these initial bars often leads to a better overall fit. Recommended range: 5-25')
+smoothColors = input.bool(false, "Smooth Colors", tooltip="Uses a crossover based mechanism to determine colors. This often results in less color transitions overall.", inline='1', group='Colors')
+lag7 = input.int(2, "Lag", tooltip="Lag for crossover detection. Lower values result in earlier crossovers. Recommended range: 1-2", inline='1', group='Colors')
+src4 = espf
+size = array.size(array.from(src4)) // size of the data series
+
+
+kernel_regression(src4, size, h7) =>
+    float _currentWeight = 0.
+    float _cumulativeWeight = 0.
+    for i = 0 to size + x_0
+        y = src[i] 
+        w = math.pow(1 + (math.pow(i, 2) / ((math.pow(h7, 2) * 2 * r7))), -r7)
+        _currentWeight += y*w
+        _cumulativeWeight += w
+    _currentWeight / _cumulativeWeight
+
+yhat1 = kernel_regression(src4, size, h7)
+yhat2 = kernel_regression(src4, size, h7-lag7)
+
+bool wasBearish = yhat1[2] > yhat1[1]
+bool wasBullish = yhat1[2] < yhat1[1]
+bool isBearish = yhat1[1] > yhat1
+bool isBullish = yhat1[1] < yhat1
+bool isBearishChange = isBearish and wasBullish
+bool isBullishChange = isBullish and wasBearish
+
+bool isBullishCross = ta.crossover(yhat2, yhat1)
+bool isBearishCross = ta.crossunder(yhat2, yhat1) 
+bool isBullishSmooth = yhat2 > yhat1
+bool isBearishSmooth = yhat2 < yhat1
+
+checkNadaraya = input(false,"Check Nadraya only")
+checkCOG = input(false,"Check COG only")
+
+color c_bullish = input.color(#3AFF17, 'Bullish Color', group='Colors')
+color c_bearish = input.color(#FD1707, 'Bearish Color', group='Colors')
+color colorByCross = isBullishSmooth ? c_bullish : c_bearish
+color colorByRate = isBullish ? c_bullish : c_bearish
+color plotColor = smoothColors ? colorByCross : colorByRate
+
+bool alertBullish = smoothColors ? isBearishCross : isBearishChange
+bool alertBearish = smoothColors ? isBullishCross : isBullishChange
+
+//plot(yhat1, "Rational Quadratic Kernel Estimate", color=plotColor, linewidth=2)
+
+ehlerIsGreen = false
+ehlerIsRed = false
+
+spbColor = color.white
+if espf > rms and alertBullish
+    spbColor := #0ebb23
+    ehlerIsGreen := true
+    ehlerIsRed := false
+
+else if espf < -rms and alertBearish
+    spbColor := color.red
+    ehlerIsGreen := false
+    ehlerIsRed := true
+else
+    spbColor := #674ea7
+
+plot(rms, title='+RMS', color=color.new(#f6b26b, 0))
+plot(espf, title='ESPF', linewidth=2, color=spbColor)
+plot(-rms, title='-RMS', color=color.new(#f6b26b, 0))
+
+hline(0, title='Zero Level', linestyle=hline.style_dotted, color=#989898)
+
+// COG
+
+theme = input.string('CUSTOM', 'Theme:', options=['CUSTOM', 'CLEAN', 'FIBONACCI', 'FIBONACCI 2'])
+src3 = input(close)
+length = input(9)
+smooth = input.string('NONE', 'Use Smoothing?', options=['RMA', 'NONE'])
+length5 = input(2, 'Smoothing Length')
+length2 = input(20, 'Previous Hig/Low Length')
+length3 = input(200, 'LSMA Length')
+length4 = input(1000, 'fib Length')
+col1 = input(color.white, 'Fib Color')
+fib = input(false, 'Show Fibonacci Levels?')
+pline = input(true, 'Show Price Line?')
+showcol = input(false, 'Dual colored trigger?')
+showhl = input(false, 'Show High/Low Levels')
+
+if theme == 'FIBONACCI 2'
+    showcol := true
+    showcol
+
+windowsize = input(title='Trigger Window Size', defval=3)
+offset = input(title='Trigger Offset', defval=0.85)
+sigma = input.float(title='Trigger Sigma', defval=6)
+
+COG1 = ta.cog(src, length)
+COG = COG1
+rma = ta.rma(COG1, length5)
+
+if smooth == 'RMA'
+    COG := rma
+    COG
+if theme == 'FIBONACCI'
+    fib := true
+    length4 := 50
+    length4
+if theme == 'FIBONACCI 2'
+    fib := true
+    length4 := 30
+    length4
+if theme == 'CLEAN'
+    COG := rma
+    length5 := 9
+    length5
+
+p1 = plot(theme == 'FIBONACCI' or theme == 'FIBONACCI 2' ? na : ta.lowest(COG, length2), color=color.new(color.green, 100), title='Previous Low')
+p2 = plot(theme == 'FIBONACCI' or theme == 'FIBONACCI 2' ? na : ta.highest(COG, length2), color=color.new(color.red, 100), title='Previous High')
+c2 = plot(pline ? COG : na, color=ta.change(COG) > 0 ? #00ffaa : color.red, linewidth=theme == 'FIBONACCI 2' ? 3 : 1, title='COG Trend Line', trackprice=true)
+c = plot(theme == 'FIBONACCI 2' or theme == 'CLEAN' ? na : COG, color=color.new(color.white, 0), linewidth=2, title='COG')
+trigger = ta.alma(COG, windowsize, offset, sigma)
+lsma = ta.linreg(COG, length3, 0)
+
+plot(theme == 'FIBONACCI' or theme == 'FIBONACCI 2' ? na : lsma, color=color.new(color.red, 0), title='LSMA')
+plot(theme == 'FIBONACCI 2' or theme == 'CLEAN' ? na : trigger, title='Trigger', color=showcol ? ta.change(COG) > 0 ? color.green : color.red : color.blue)
+plot(theme == 'CLEAN' ? COG : na, color=color.new(color.blue, 0), linewidth=3)
+plot(theme == 'CLEAN' ? ta.sma(COG, 2) : na, color=color.new(color.white, 0), linewidth=2)
+
+cogh = ta.highest(COG, length4)
+l = ta.lowest(COG, length4)
+range_1 = h - l
+
+l1 = cogh - range_1 * 0.236
+l2 = cogh - range_1 * 0.382
+l3 = cogh - range_1 * 0.618
+l4 = cogh - range_1 * 0.764
+l5 = cogh - range_1 * 0.5
+
+enter = ta.crossover(COG1, trigger)
+
+cogValue = ta.change(COG)
+
+cogIsGreen = cogValue > 0
+cogIsRed = cogValue <= 0
+
+
+// alerts
+
+buyCondition = (kernelCrossOver12 or kernelCrossOver13) and alertBullish and cogIsGreen
+sellCondition = (kernelCrossUnder12 or kernelCrossUnder13) and alertBearish and cogIsRed
+
+if checkNadaraya and checkCOG
+    buyCondition := (kernelCrossOver12 or kernelCrossOver13) and alertBullish and cogIsGreen
+    sellCondition := (kernelCrossUnder12 or kernelCrossUnder13) and alertBearish and cogIsRed
+else if checkNadaraya
+    buyCondition := (kernelCrossOver12 or kernelCrossOver13) and alertBullish
+    sellCondition := (kernelCrossUnder12 or kernelCrossUnder13) and alertBearish
+else if checkCOG
+    buyCondition := (kernelCrossOver12 or kernelCrossOver13) and cogIsGreen
+    sellCondition := (kernelCrossUnder12 or kernelCrossUnder13) and cogIsRed
+
+plotshape(buyCondition, title="Buy Signal", text = "Buy", textcolor = color.green, color=color.green, style=shape.triangleup, location=location.belowbar,size = size.small)
+plotshape(sellCondition, title="Sell Signal", text = "Sell", textcolor = color.red, color=color.red, style=shape.triangledown, location=location.abovebar,size = size.small)
+
+//plotshape(ehlerIsRed, title="Buy Signal", text = "ehlerRED", textcolor = color.red, color=color.red, style=shape.triangleup, location=location.belowbar,size = size.small)
+//plotshape(cogIsRed, title="Buy Signal", text = "cogRED", textcolor = color.red, color=color.red, style=shape.triangleup, location=location.belowbar,size = size.small)
+//plotshape(alertBearish, title="Buy Signal", text = "bearish", textcolor = color.red, color=color.red, style=shape.triangleup, location=location.belowbar,size = size.small)
+
+//plotshape(ehlerIsGreen, title="Buy Signal", text = "ehlerGreen", textcolor = color.green, color=color.green, style=shape.triangleup, location=location.belowbar,size = size.small)
+//plotshape(cogIsGreen, title="Buy Signal", text = "cogGreen", textcolor = color.green, color=color.green, style=shape.triangleup, location=location.belowbar,size = size.small)
+//plotshape(alertBullish, title="Buy Signal", text = "bullish", textcolor = color.green, color=color.green, style=shape.triangleup, location=location.belowbar,size = size.small)
+
+alertcondition(buyCondition,"Buy Condition", message = "BUY!")
+alertcondition(sellCondition,"Sell Condition", message = "SELL!")
